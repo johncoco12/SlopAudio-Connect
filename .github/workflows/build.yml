@@ -21,9 +21,6 @@ jobs:
           - os: ubuntu-latest
             artifact: SlopAudioConnect
             archive: SlopAudio-Connect-linux.tar.gz
-          - os: macos-13
-            artifact: SlopAudioConnect.app
-            archive: SlopAudio-Connect-macos.zip
           - os: windows-latest
             artifact: SlopAudioConnect.exe
             archive: SlopAudio-Connect-windows.zip
@@ -42,9 +39,6 @@ jobs:
             libxcursor-dev libfreetype-dev libfontconfig-dev \
             libgl-dev libglu1-mesa-dev
 
-      - name: Install dependencies (macOS)
-        if: runner.os == 'macOS'
-        run: brew install cmake ninja curl
 
       - name: Install dependencies (Windows)
         if: runner.os == 'Windows'
@@ -67,14 +61,6 @@ jobs:
           cp "build/SlopAudioConnect_artefacts/Release/SlopAudio Connect" dist/ 2>/dev/null || \
           cp "build/SlopAudioConnect_artefacts/SlopAudio Connect" dist/
           tar -czf ${{ matrix.archive }} -C dist .
-
-      - name: Package (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          mkdir -p dist
-          cp -r "build/SlopAudioConnect_artefacts/Release/SlopAudio Connect.app" dist/ 2>/dev/null || \
-          cp -r "build/SlopAudioConnect_artefacts/SlopAudio Connect.app" dist/
-          cd dist && zip -r ../${{ matrix.archive }} .
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
