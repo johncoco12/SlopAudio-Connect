@@ -18,6 +18,13 @@ public:
                                               const std::string& tuning,
                                               const std::string& arrangement) = 0;
         virtual void stopMonitoringRequested()                       = 0;
+
+        virtual void requestChainStateReceived()                                            = 0;
+        virtual void setParameterReceived(int pluginIndex, int parameterIndex, float value) = 0;
+        virtual void setBypassReceived(int pluginIndex, bool bypassed)                      = 0;
+        virtual void movePluginReceived(int fromIndex, int toIndex)                         = 0;
+        virtual void removePluginReceived(int pluginIndex)                                  = 0;
+        virtual void addPluginReceived(const std::string& pluginId)                         = 0;
     };
 
     UdpSession();
@@ -38,6 +45,9 @@ public:
 
     void sendMonitoringStarted();
     void sendMonitoringStopped();
+
+    void sendChainState(const std::string& payload);
+    void sendPluginList(const std::string& payload);
 
 private:
     void run() override;

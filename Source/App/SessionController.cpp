@@ -1,4 +1,5 @@
 #include "SessionController.h"
+#include "../Network/MessageTypes.h"
 
 SessionController::SessionController(AppState& state)
     : appState(state)
@@ -107,6 +108,14 @@ void SessionController::sessionConnected(const std::string& sessionId)
     appState.setSessionId(sessionId);
     appState.setConnectionState(ConnectionState::Authenticated);
     startTimerHz(60);
+
+    audioEngine.getPluginChain().onChainChanged = [this]()
+    {
+        broadcastChainState();
+    };
+
+    broadcastPluginList();
+    broadcastChainState();
 }
 
 void SessionController::sessionDenied(const std::string& reason)
@@ -121,6 +130,7 @@ void SessionController::sessionDisconnected(const std::string& reason)
     juce::Logger::writeToLog("[SessionController] session disconnected — reason=" + juce::String(reason));
     stopTimer();
     audioEngine.setMonitoring(false);
+    audioEngine.getPluginChain().onChainChanged = nullptr;
     appState.setLastError("Disconnected: " + juce::String(reason));
     appState.setConnectionState(ConnectionState::Idle);
 }
@@ -149,4 +159,79 @@ void SessionController::stopMonitoringRequested()
 void SessionController::timerCallback()
 {
     drainPitchFifo();
+}
+
+void SessionController::requestChainStateReceived()
+{
+    juce::Logger::writeToLog("[SessionController] requestChainState received");
+    broadcastPluginList();
+    broadcastChainState();
+}
+
+void SessionController::setParameterReceived(int pluginIndex, int parameterIndex, float value)
+{
+
+    audioEngine.getPluginChain().queueParameterChange(pluginIndex, parameterIndex, value);
+}
+
+void SessionController::setBypassReceived(int pluginIndex, bool bypassed)
+{
+    juce::Logger::writeToLog("[SessionController] setBypass pluginIndex=" + juce::String(pluginIndex)
+        + "  bypassed=" + juce::String(bypassed ? "true" : "false"));
+    audioEngine.getPluginChain().setBypassed(pluginIndex, bypassed);
+
+}
+
+void SessionController::movePluginReceived(int fromIndex, int toIndex)
+{
+    juce::Logger::writeToLog("[SessionController] movePlugin from=" + juce::String(fromIndex)
+        + "  to=" + juce::String(toIndex));
+    audioEngine.getPluginChain().movePlugin(fromIndex, toIndex);
+
+}
+
+void SessionController::removePluginReceived(int pluginIndex)
+{
+    juce::Logger::writeToLog("[SessionController] removePlugin index=" + juce::String(pluginIndex));
+    audioEngine.getPluginChain().removePlugin(pluginIndex);
+
+}
+
+void SessionController::addPluginReceived(const std::string& pluginId)
+{
+    juce::Logger::writeToLog("[SessionController] addPlugin pluginId=" + juce::String(pluginId));
+
+    auto& chain = audioEngine.getPluginChain();
+    const auto& known = chain.getKnownPlugins();
+
+    for (const auto& desc : known.getTypes())
+    {
+        if (desc.createIdentifierString().toStdString() == pluginId)
+        {
+            juce::String err;
+            if (!chain.addPlugin(desc, err))
+                juce::Logger::writeToLog("[SessionController] addPlugin failed: " + err);
+
+            return;
+        }
+    }
+
+    juce::Logger::writeToLog("[SessionController] addPlugin: pluginId not in known list: "
+        + juce::String(pluginId));
+}
+
+void SessionController::broadcastChainState()
+{
+    if (!udpSession.isConnected()) return;
+    udpSession.sendChainState(
+        makeChainState(udpSession.getSessionId(),
+                       audioEngine.getPluginChain().serialiseChain()));
+}
+
+void SessionController::broadcastPluginList()
+{
+    if (!udpSession.isConnected()) return;
+    udpSession.sendPluginList(
+        makePluginList(udpSession.getSessionId(),
+                       audioEngine.getPluginChain().serialisePluginList()));
 }

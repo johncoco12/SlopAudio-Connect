@@ -1,7 +1,9 @@
 #pragma once
 #include <JuceHeader.h>
+#include <nlohmann/json.hpp>
 #include <vector>
 #include <memory>
+#include <array>
 
 class PluginChainProcessor
 {
@@ -14,6 +16,11 @@ public:
 
     bool addPlugin(const juce::PluginDescription& desc,
                    double sampleRate, int blockSize, juce::String& error);
+
+    bool addPlugin(const juce::PluginDescription& desc, juce::String& error)
+    {
+        return addPlugin(desc, currentSampleRate, currentBlockSize, error);
+    }
 
     void removePlugin(int index);
     void movePlugin(int fromIndex, int toIndex);
@@ -31,6 +38,11 @@ public:
     void            loadState(const juce::ValueTree& state,
                               double sampleRate, int blockSize);
 
+    nlohmann::json serialiseChain() const;
+    nlohmann::json serialisePluginList() const;
+
+    void queueParameterChange(int pluginIndex, int parameterIndex, float value);
+
     std::function<void()> onChainChanged;
 
 private:
@@ -43,6 +55,11 @@ private:
     int    currentBlockSize  = 512;
 
     juce::CriticalSection chainLock;
+
+    struct ParameterChange { int pluginIndex; int parameterIndex; float value; };
+    static constexpr int kParamQueueSize = 256;
+    std::array<ParameterChange, kParamQueueSize> paramQueue {};
+    juce::AbstractFifo                           paramFifo { kParamQueueSize };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginChainProcessor)
 };

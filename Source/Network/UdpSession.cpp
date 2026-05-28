@@ -90,6 +90,18 @@ void UdpSession::sendMonitoringStopped()
     sendControl(makeMonitoringStopped(sessionId));
 }
 
+void UdpSession::sendChainState(const std::string& payload)
+{
+    juce::Logger::writeToLog("[UdpSession] sending CHAIN_STATE (" + juce::String(payload.size()) + " bytes)");
+    sendControl(payload);
+}
+
+void UdpSession::sendPluginList(const std::string& payload)
+{
+    juce::Logger::writeToLog("[UdpSession] sending PLUGIN_LIST (" + juce::String(payload.size()) + " bytes)");
+    sendControl(payload);
+}
+
 void UdpSession::run()
 {
     juce::Logger::writeToLog("[UdpSession] receive loop running");
@@ -242,6 +254,79 @@ void UdpSession::processInbound(const std::string& json)
         juce::MessageManager::callAsync([this, reason = msg->reason]
         {
             listeners.call(&Listener::sessionDisconnected, reason);
+        });
+        return;
+    }
+
+    if (msg->type == "REQUEST_CHAIN_STATE")
+    {
+        juce::Logger::writeToLog("[UdpSession] REQUEST_CHAIN_STATE received");
+        juce::MessageManager::callAsync([this]
+        {
+            listeners.call(&Listener::requestChainStateReceived);
+        });
+        return;
+    }
+
+    if (msg->type == "SET_PARAMETER")
+    {
+        juce::Logger::writeToLog("[UdpSession] SET_PARAMETER pluginIndex=" + juce::String(msg->pluginIndex)
+            + "  parameterIndex=" + juce::String(msg->parameterIndex)
+            + "  value=" + juce::String(msg->value));
+        const int   pi  = msg->pluginIndex;
+        const int   pai = msg->parameterIndex;
+        const float v   = msg->value;
+        juce::MessageManager::callAsync([this, pi, pai, v]
+        {
+            listeners.call(&Listener::setParameterReceived, pi, pai, v);
+        });
+        return;
+    }
+
+    if (msg->type == "SET_BYPASS")
+    {
+        juce::Logger::writeToLog("[UdpSession] SET_BYPASS pluginIndex=" + juce::String(msg->pluginIndex)
+            + "  bypassed=" + juce::String(msg->bypassed ? "true" : "false"));
+        const int  pi = msg->pluginIndex;
+        const bool by = msg->bypassed;
+        juce::MessageManager::callAsync([this, pi, by]
+        {
+            listeners.call(&Listener::setBypassReceived, pi, by);
+        });
+        return;
+    }
+
+    if (msg->type == "MOVE_PLUGIN")
+    {
+        juce::Logger::writeToLog("[UdpSession] MOVE_PLUGIN from=" + juce::String(msg->fromIndex)
+            + "  to=" + juce::String(msg->toIndex));
+        const int from = msg->fromIndex;
+        const int to   = msg->toIndex;
+        juce::MessageManager::callAsync([this, from, to]
+        {
+            listeners.call(&Listener::movePluginReceived, from, to);
+        });
+        return;
+    }
+
+    if (msg->type == "REMOVE_PLUGIN")
+    {
+        juce::Logger::writeToLog("[UdpSession] REMOVE_PLUGIN pluginIndex=" + juce::String(msg->pluginIndex));
+        const int pi = msg->pluginIndex;
+        juce::MessageManager::callAsync([this, pi]
+        {
+            listeners.call(&Listener::removePluginReceived, pi);
+        });
+        return;
+    }
+
+    if (msg->type == "ADD_PLUGIN")
+    {
+        juce::Logger::writeToLog("[UdpSession] ADD_PLUGIN pluginId=" + juce::String(msg->pluginId));
+        const std::string pid = msg->pluginId;
+        juce::MessageManager::callAsync([this, pid]
+        {
+            listeners.call(&Listener::addPluginReceived, pid);
         });
         return;
     }

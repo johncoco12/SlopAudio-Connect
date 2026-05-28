@@ -41,6 +41,16 @@ private:
                                   const std::string& arrangement) override;
     void stopMonitoringRequested() override;
 
+    void requestChainStateReceived()                                            override;
+    void setParameterReceived(int pluginIndex, int parameterIndex, float value) override;
+    void setBypassReceived(int pluginIndex, bool bypassed)                      override;
+    void movePluginReceived(int fromIndex, int toIndex)                         override;
+    void removePluginReceived(int pluginIndex)                                  override;
+    void addPluginReceived(const std::string& pluginId)                         override;
+
+    void broadcastChainState();
+    void broadcastPluginList();
+
     void timerCallback() override;
 
     AppState&        appState;

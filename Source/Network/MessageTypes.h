@@ -94,6 +94,26 @@ inline std::string makePitchPacket(const std::string& sessionId,
     }.dump();
 }
 
+inline std::string makeChainState(const std::string& sessionId,
+                                  const nlohmann::json& plugins)
+{
+    return nlohmann::json {
+        { "type",      "CHAIN_STATE" },
+        { "sessionId", sessionId     },
+        { "plugins",   plugins       }
+    }.dump();
+}
+
+inline std::string makePluginList(const std::string& sessionId,
+                                  const nlohmann::json& plugins)
+{
+    return nlohmann::json {
+        { "type",      "PLUGIN_LIST" },
+        { "sessionId", sessionId     },
+        { "plugins",   plugins       }
+    }.dump();
+}
+
 struct InboundMsg
 {
     std::string type;
@@ -103,6 +123,14 @@ struct InboundMsg
     std::string trackId;
     std::string tuning;
     std::string arrangement;
+
+    int         pluginIndex    = -1;
+    int         parameterIndex = -1;
+    float       value          = 0.0f;
+    int         fromIndex      = -1;
+    int         toIndex        = -1;
+    std::string pluginId;
+    bool        bypassed       = false;
 
     static std::optional<InboundMsg> parse(const std::string& json)
     {
@@ -120,6 +148,15 @@ struct InboundMsg
                 m.tuning = j["tuning"].is_string() ? j["tuning"].get<std::string>()
                                                     : j["tuning"].dump();
             m.arrangement = j.value("arrangement", "");
+
+            m.pluginIndex    = j.value("pluginIndex",    -1);
+            m.parameterIndex = j.value("parameterIndex", -1);
+            m.value          = j.value("value",          0.0f);
+            m.fromIndex      = j.value("fromIndex",      -1);
+            m.toIndex        = j.value("toIndex",        -1);
+            m.pluginId       = j.value("pluginId",       "");
+            m.bypassed       = j.value("bypassed",       false);
+
             return m;
         }
         catch (...) { return std::nullopt; }

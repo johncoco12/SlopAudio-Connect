@@ -117,10 +117,35 @@ void PluginChainProcessor::prepare(double sampleRate, int maxBlockSize)
         p->prepareToPlay(sampleRate, maxBlockSize);
 }
 
+void PluginChainProcessor::queueParameterChange(int pluginIndex, int parameterIndex, float value)
+{
+    auto scope = paramFifo.write(1);
+    if (scope.blockSize1 > 0)
+        paramQueue[scope.startIndex1] = { pluginIndex, parameterIndex, value };
+
+}
+
 void PluginChainProcessor::processBlock(juce::AudioBuffer<float>& buffer,
                                          juce::MidiBuffer& midi)
 {
     juce::ScopedLock sl(chainLock);
+
+    {
+        auto scope = paramFifo.read(paramFifo.getNumReady());
+        auto apply = [&](int idx)
+        {
+            const auto& c = paramQueue[idx];
+            if (c.pluginIndex >= 0 && c.pluginIndex < static_cast<int>(chain.size()))
+            {
+                const auto& params = chain[c.pluginIndex]->getParameters();
+                if (c.parameterIndex >= 0 && c.parameterIndex < params.size())
+                    params[c.parameterIndex]->setValue(c.value);
+            }
+        };
+        for (int i = 0; i < scope.blockSize1; ++i) apply(scope.startIndex1 + i);
+        for (int i = 0; i < scope.blockSize2; ++i) apply(scope.startIndex2 + i);
+    }
+
     for (int i = 0; i < static_cast<int>(chain.size()); ++i)
     {
         if (i < static_cast<int>(bypassedFlags.size()) && bypassedFlags[i])
@@ -169,11 +194,11 @@ void PluginChainProcessor::loadState(const juce::ValueTree& state,
         juce::PluginDescription desc;
 
         const juce::String identifier = node.getProperty("identifier").toString();
-        for (int j = 0; j < knownPlugins.getNumTypes(); ++j)
+        for (const auto& d : knownPlugins.getTypes())
         {
-            if (knownPlugins.getType(j)->createIdentifierString() == identifier)
+            if (d.createIdentifierString() == identifier)
             {
-                desc = *knownPlugins.getType(j);
+                desc = d;
                 break;
             }
         }
@@ -194,4 +219,63 @@ void PluginChainProcessor::loadState(const juce::ValueTree& state,
     }
 
     if (onChainChanged) onChainChanged();
+}
+
+nlohmann::json PluginChainProcessor::serialiseChain() const
+{
+    juce::ScopedLock sl(chainLock);
+    auto plugins = nlohmann::json::array();
+
+    for (int i = 0; i < static_cast<int>(chain.size()); ++i)
+    {
+        auto* plugin = chain[i].get();
+        const auto desc = plugin->getPluginDescription();
+
+        auto params = nlohmann::json::array();
+        const auto& paramList = plugin->getParameters();
+        for (int j = 0; j < paramList.size(); ++j)
+        {
+            auto* p = paramList[j];
+
+            const int juceSteps = p->getNumSteps();
+            const int steps     = (juceSteps >= 0x7fffff) ? 0 : juceSteps;
+
+            params.push_back({
+                { "index",        j                                         },
+                { "name",         p->getName(64).toStdString()             },
+                { "label",        p->getLabel().toStdString()              },
+                { "value",        p->getValue()                            },
+                { "defaultValue", p->getDefaultValue()                     },
+                { "steps",        steps                                    }
+            });
+        }
+
+        plugins.push_back({
+            { "index",      i                                                      },
+            { "name",       desc.name.toStdString()                               },
+            { "vendor",     desc.manufacturerName.toStdString()                   },
+            { "pluginId",   desc.createIdentifierString().toStdString()           },
+            { "bypassed",   i < static_cast<int>(bypassedFlags.size())
+                              ? bypassedFlags[i] : false                           },
+            { "parameters", params                                                 }
+        });
+    }
+
+    return plugins;
+}
+
+nlohmann::json PluginChainProcessor::serialisePluginList() const
+{
+    auto plugins = nlohmann::json::array();
+
+    for (const auto& desc : knownPlugins.getTypes())
+    {
+        plugins.push_back({
+            { "pluginId", desc.createIdentifierString().toStdString() },
+            { "name",     desc.name.toStdString()                    },
+            { "vendor",   desc.manufacturerName.toStdString()         }
+        });
+    }
+
+    return plugins;
 }
