@@ -19,7 +19,7 @@ jobs:
           - os: ubuntu-latest
             artifact: SlopAudioConnect
             archive: SlopAudio-Connect-linux.tar.gz
-          - os: macos-latest
+          - os: macos-13
             artifact: SlopAudioConnect.app
             archive: SlopAudio-Connect-macos.zip
           - os: windows-latest
@@ -46,10 +46,14 @@ jobs:
 
       - name: Install dependencies (Windows)
         if: runner.os == 'Windows'
-        run: choco install cmake ninja curl --no-progress
+        run: |
+          vcpkg install curl:x64-windows
+          echo "CMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake" >> $env:GITHUB_ENV
+          echo "VCPKG_TARGET_TRIPLET=x64-windows" >> $env:GITHUB_ENV
+        shell: pwsh
 
       - name: Configure
-        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release ${{ runner.os == 'Windows' && '-DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows' || '' }}
 
       - name: Build
         run: cmake --build build --config Release
@@ -58,16 +62,16 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           mkdir -p dist
-          cp build/SlopAudioConnect_artefacts/Release/SlopAudioConnect dist/ 2>/dev/null || \
-          cp build/SlopAudioConnect_artefacts/SlopAudioConnect dist/
+          cp "build/SlopAudioConnect_artefacts/Release/SlopAudio Connect" dist/ 2>/dev/null || \
+          cp "build/SlopAudioConnect_artefacts/SlopAudio Connect" dist/
           tar -czf ${{ matrix.archive }} -C dist .
 
       - name: Package (macOS)
         if: runner.os == 'macOS'
         run: |
           mkdir -p dist
-          cp -r "build/SlopAudioConnect_artefacts/Release/SlopAudioConnect.app" dist/ 2>/dev/null || \
-          cp -r "build/SlopAudioConnect_artefacts/SlopAudioConnect.app" dist/
+          cp -r "build/SlopAudioConnect_artefacts/Release/SlopAudio Connect.app" dist/ 2>/dev/null || \
+          cp -r "build/SlopAudioConnect_artefacts/SlopAudio Connect.app" dist/
           cd dist && zip -r ../${{ matrix.archive }} .
 
       - name: Package (Windows)
@@ -75,8 +79,14 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist
-          $src = "build\SlopAudioConnect_artefacts\Release\SlopAudioConnect.exe"
-          if (-not (Test-Path $src)) { $src = "build\SlopAudioConnect_artefacts\SlopAudioConnect.exe" }
+          $search = @(
+            "build\SlopAudioConnect_artefacts\Release\SlopAudio Connect.exe",
+            "build\SlopAudioConnect_artefacts\SlopAudio Connect.exe",
+            "build\SlopAudioConnect_artefacts\Release\SlopAudioConnect.exe",
+            "build\SlopAudioConnect_artefacts\SlopAudioConnect.exe"
+          )
+          $src = $search | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $src) { Get-ChildItem -Recurse build\SlopAudioConnect_artefacts; exit 1 }
           Copy-Item $src dist\
           Compress-Archive -Path dist\* -DestinationPath ${{ matrix.archive }}
 
