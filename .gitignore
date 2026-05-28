@@ -1,0 +1,5 @@
+build/
+.cache/
+*.user
+*lucide-main**
+.DS_Store
