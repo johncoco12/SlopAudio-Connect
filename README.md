@@ -1,4 +1,5 @@
 # SlopAudio Connect
+[![Build](https://github.com/johncoco12/SlopAudio-Connect/actions/workflows/build.yml/badge.svg)](https://github.com/johncoco12/SlopAudio-Connect/actions/workflows/build.yml)
 
 Desktop companion app for SlopSmith Plus. Captures audio from your instrument, detects pitch in real time using the YIN algorithm, and streams it to the SlopSmith Plus server over UDP so your playing is reflected in the game.
 
