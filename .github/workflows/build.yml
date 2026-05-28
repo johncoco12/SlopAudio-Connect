@@ -1,0 +1,93 @@
+name: Build
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+  release:
+    types: [created]
+
+jobs:
+  build:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: SlopAudioConnect
+            archive: SlopAudio-Connect-linux.tar.gz
+          - os: macos-latest
+            artifact: SlopAudioConnect.app
+            archive: SlopAudio-Connect-macos.zip
+          - os: windows-latest
+            artifact: SlopAudioConnect.exe
+            archive: SlopAudio-Connect-windows.zip
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            cmake ninja-build libcurl4-openssl-dev \
+            libasound2-dev libx11-dev libxrandr-dev libxinerama-dev \
+            libxcursor-dev libfreetype-dev libfontconfig-dev \
+            libgl-dev libglu1-mesa-dev
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install cmake ninja curl
+
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows'
+        run: choco install cmake ninja curl --no-progress
+
+      - name: Configure
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p dist
+          cp build/SlopAudioConnect_artefacts/Release/SlopAudioConnect dist/ 2>/dev/null || \
+          cp build/SlopAudioConnect_artefacts/SlopAudioConnect dist/
+          tar -czf ${{ matrix.archive }} -C dist .
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p dist
+          cp -r "build/SlopAudioConnect_artefacts/Release/SlopAudioConnect.app" dist/ 2>/dev/null || \
+          cp -r "build/SlopAudioConnect_artefacts/SlopAudioConnect.app" dist/
+          cd dist && zip -r ../${{ matrix.archive }} .
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist
+          $src = "build\SlopAudioConnect_artefacts\Release\SlopAudioConnect.exe"
+          if (-not (Test-Path $src)) { $src = "build\SlopAudioConnect_artefacts\SlopAudioConnect.exe" }
+          Copy-Item $src dist\
+          Compress-Archive -Path dist\* -DestinationPath ${{ matrix.archive }}
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.archive }}
+          path: ${{ matrix.archive }}
+
+      - name: Upload to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.archive }}
